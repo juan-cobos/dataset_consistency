@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+
+# Clone the v1dd-ingest branch and install it
+git clone --branch v1dd-ingest --depth 1 \
+    https://github.com/AllenInstitute/ConnectsCommonConnectivity.git
+cd ConnectsCommonConnectivity
+pip install .
