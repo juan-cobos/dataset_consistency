@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
@@ -50,6 +51,10 @@ class Dataset:
         nwb_path = next(session_dir.glob("*.nwb.zarr"))
         return pynwb.read_nwb(nwb_path)
 
+    def start_time(self, session_id: str) -> datetime:
+        """Start time for session_id."""
+        return self.load_nwb(session_id).session_start_time
+
     def load_trials(self, session_id: str) -> pd.DataFrame:
         nwb = self.load_nwb(session_id)
         if nwb.trials is not None:
@@ -80,6 +85,9 @@ class Ephys(Dataset):
 
     def load_units(self, session_id: str) -> pd.DataFrame:
         return self.load_nwb(session_id).units.to_dataframe()
+
+    def load_unit_timestamps(self, session_id: str) -> pd.Series:
+        return self.load_units(session_id)["spike_times"]
 
     def load_behavior(self, session_id: str) -> dict[str, pd.DataFrame]:
         running = self.load_nwb(session_id).processing["running"]
