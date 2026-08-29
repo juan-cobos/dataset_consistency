@@ -28,31 +28,37 @@ class Dataset:
 
     @cached_property
     def metadata(self) -> pd.DataFrame:
+        """Load the per-session metadata table for this dataset."""
         return pd.read_csv(self.metadata_path)
 
     @cached_property
     def sessions(self) -> dict[str, Path]:
+        """Map each session_id to its data directory."""
         return {p.name: p for p in sorted(self.data_path.iterdir()) if p.is_dir()}
 
     def session_ids(self) -> list[str]:
+        """List all available session_ids."""
         return list(self.sessions)
 
     def session_metadata(self, session_id: str) -> pd.Series:
+        """Return the metadata row for session_id."""
         rows = self.metadata.loc[self.metadata["name"] == session_id]
         if rows.empty:
             raise KeyError(f"No metadata found for session {session_id!r}")
         return rows.iloc[0]
 
     def load_nwb(self, session_id: str) -> pynwb.NWBFile:
+        """Load the NWB file for session_id."""
         session_dir = self.sessions[session_id]
         nwb_path = next(session_dir.glob("*.nwb.zarr"))
         return pynwb.read_nwb(nwb_path)
 
     def start_time(self, session_id: str) -> datetime:
-        """Start time for session_id."""
+        """Return the start time for session_id."""
         return self.load_nwb(session_id).session_start_time
 
     def load_trials(self, session_id: str) -> pd.DataFrame:
+        """Load all stimulus presentation intervals for session_id, tagged by stimulus_type."""
         nwb = self.load_nwb(session_id)
         if nwb.trials is not None:
             return nwb.trials.to_dataframe()
@@ -70,6 +76,7 @@ class Dataset:
         return pd.concat(frames) if frames else pd.DataFrame()
 
     def stimulus_types(self, session_id: str) -> np.ndarray:
+        """Return the unique stimulus types presented in session_id."""
         trials = self.load_trials(session_id)
         return trials.stimulus_type.unique()
 
@@ -81,13 +88,16 @@ class Ephys(Dataset):
     metadata_path: Path = METADATA_PATH / "visual_coding_neuropixels_metadata.csv"
 
     def load_units(self, session_id: str) -> pd.DataFrame:
+        """Load all recorded units (neurons) and their properties for session_id."""
         return self.load_nwb(session_id).units.to_dataframe()
 
     def brain_structures(self, session_id: str) -> np.ndarray:
+        """Return the unique brain structures recorded across units in session_id."""
         acronyms = self.load_units(session_id)["ecephys_structure_acronym"]
         return acronyms[acronyms != ""].unique()
 
     def load_behavior(self, session_id: str) -> dict[str, pd.DataFrame]:
+        """Load running-wheel behavioral time series for session_id."""
         running = self.load_nwb(session_id).processing["running"]
         return {
             name: pd.DataFrame({name: ts.data[:]}, index=ts.timestamps[:])
@@ -106,6 +116,7 @@ class Ophys(Dataset):
         nwb: pynwb.NWBFile,
         stimulus_type: str,
     ) -> pynwb.image.ImageSeries:
+        """Return the template image series for stimulus_type."""
         templates = nwb.stimulus_template
         for name in (stimulus_type, f"{stimulus_type}_template"):
             if name in templates:
@@ -130,16 +141,19 @@ class Ophys(Dataset):
         stimulus_type: str,
         frame_idx: int,
     ) -> Image.Image:
+        """Return the frame shown at presentation frame_idx of stimulus_type."""
         nwb = self.load_nwb(session_id)
         template = self._stimulus_template(nwb, stimulus_type)
         presentations = nwb.stimulus[f"{stimulus_type}_stimulus"]
         return Image.fromarray(template.data[presentations.data[frame_idx]])
 
     def brain_structures(self, session_id: str) -> np.ndarray:
+        """Return the unique brain structures imaged across planes in session_id."""
         planes = self.load_nwb(session_id).imaging_planes.values()
         return np.unique([plane.location for plane in planes])
 
     def load_dff(self, session_id: str) -> pd.DataFrame:
+        """Load dF/F traces for every ROI in session_id, indexed by timestamp."""
         rrs = (
             self.load_nwb(session_id)
             .processing["ophys"]
@@ -150,6 +164,7 @@ class Ophys(Dataset):
         return pd.DataFrame(rrs.data[:], index=rrs.timestamps[:], columns=roi_ids)
 
     def load_behavior(self, session_id: str) -> pd.DataFrame:
+        """Load the running speed time series for session_id."""
         rs = (
             self.load_nwb(session_id)
             .processing["behavior"]
