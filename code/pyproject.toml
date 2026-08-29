@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.3.3",
     "pynwb>=4.1.0",
     "hdmf-zarr>=0.13.0",
+    "pillow>=12.3.0",
 ]
 
 [build-system]

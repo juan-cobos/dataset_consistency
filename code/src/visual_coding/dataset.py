@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pynwb
+from PIL import Image
 
 ROOT = Path("/root/capsule/data")
 try:
@@ -86,9 +87,6 @@ class Ephys(Dataset):
     def load_units(self, session_id: str) -> pd.DataFrame:
         return self.load_nwb(session_id).units.to_dataframe()
 
-    def load_unit_timestamps(self, session_id: str) -> pd.Series:
-        return self.load_units(session_id)["spike_times"]
-
     def load_behavior(self, session_id: str) -> dict[str, pd.DataFrame]:
         running = self.load_nwb(session_id).processing["running"]
         return {
@@ -102,6 +100,15 @@ class Ophys(Dataset):
     name: str = "ophys"
     data_path: Path = OPHYS_PATH
     metadata_path: Path = METADATA_PATH / "visual_coding_ophys_metadata.csv"
+
+    def load_stimulus(self, session_id: str, stimulus_type: str) -> np.ndarray:
+        templates = self.load_nwb(session_id).stimulus_template
+        for name in (stimulus_type, f"{stimulus_type}_template"):
+            if name in templates:
+                return templates[name].data[:]
+        raise KeyError(
+            f"No stimulus template for {stimulus_type!r}; available: {list(templates.keys())}",
+        )
 
     def load_dff(self, session_id: str) -> pd.DataFrame:
         rrs = (
@@ -127,3 +134,7 @@ if __name__ == "__main__":
     ophys = Ophys()
     session_id = ophys.session_ids()[0]
     print(ophys.load_dff(session_id).head())
+
+    frame = ophys.load_stimulus(session_id, "natural_movie_one")[0]
+    print(f"natural_movie_one frame 0: shape={frame.shape}, dtype={frame.dtype}")
+    Image.fromarray(frame).show()
