@@ -64,3 +64,45 @@ def psth(
     ax.set_ylabel(ylabel)
     fig.savefig(save_path)
     plt.close(fig)
+
+
+def polar_orientation_tuning(
+    orientations: np.ndarray,
+    responses: np.ndarray,
+    errors: np.ndarray,
+    selectivity: float,
+    save_path: Path = RESULTS / "polar_orientation_tuning.png",
+    ylabel: str = "response",
+) -> None:
+    """Polar tuning curve of mean response (+/- SEM) across orientation/direction."""
+    theta = np.deg2rad(orientations)
+    theta = np.append(theta, theta[0] + 2 * np.pi)
+    response = np.append(responses, responses[0])
+    error = np.append(errors, errors[0])
+
+    fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
+    ax.plot(theta, response, marker="o")
+    ax.fill_between(theta, response - error, response + error, alpha=0.3)
+    ax.set_title(f"selectivity index = {selectivity:.2f}")
+    ax.set_ylabel(ylabel, labelpad=30)
+    fig.savefig(save_path)
+    plt.close(fig)
+
+
+def orientation_tuning(
+    orientations: np.ndarray,
+    responses: np.ndarray,
+    errors: np.ndarray,
+    selectivity: float,
+    save_path: Path = RESULTS / "orientation_tuning.png",
+    ylabel: str = "response",
+) -> None:
+    """Linear tuning curve of mean response (+/- SEM) across orientation/direction."""
+    fig, ax = plt.subplots()
+    ax.errorbar(orientations, responses, yerr=errors, marker="o")
+    ax.set_title(f"selectivity index = {selectivity:.2f}")
+    ax.set_xlabel("orientation (deg)")
+    ax.set_xticks(orientations)
+    ax.set_ylabel(ylabel)
+    fig.savefig(save_path)
+    plt.close(fig)

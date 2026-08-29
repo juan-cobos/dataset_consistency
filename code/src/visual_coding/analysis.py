@@ -48,3 +48,37 @@ def align_epochs(
         ],
     )
     return epochs, centers
+
+
+def tuning_curve(
+    conditions: np.ndarray,
+    responses: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Average per-trial responses by condition (e.g. grating orientation), with SEM."""
+    conditions = np.asarray(conditions)
+    responses = np.asarray(responses, dtype=float)
+    unique_conditions = np.unique(conditions)
+    grouped = [responses[conditions == c] for c in unique_conditions]
+    means = np.array([g.mean() for g in grouped])
+    sems = np.array([g.std(ddof=1) / np.sqrt(len(g)) for g in grouped])
+    return unique_conditions, means, sems
+
+
+def selectivity_index(
+    conditions: np.ndarray,
+    responses: np.ndarray,
+    harmonic: int = 2,
+) -> float:
+    """Vector-sum selectivity of responses across a circular condition (e.g. orientation).
+
+    `harmonic=2` folds the 180-degree symmetry of grating orientation (the
+    standard orientation selectivity index); `harmonic=1` treats conditions
+    as full 360-degree directions (direction selectivity index). Ranges from
+    0 (response spread uniformly across conditions) to 1 (response
+    concentrated at a single condition).
+    """
+    responses = np.clip(np.asarray(responses, dtype=float), 0, None)
+    angles = np.deg2rad(np.asarray(conditions, dtype=float)) * harmonic
+    vector = np.sum(responses * np.exp(1j * angles))
+    total = responses.sum()
+    return np.abs(vector) / total if total > 0 else 0.0
