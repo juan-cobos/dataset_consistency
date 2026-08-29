@@ -4,8 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from visual_coding.dataset import Ephys, Ophys
-from visual_coding.transforms import ZScore
+from visual_coding.analysis import zscore
 from visual_coding.utils import RESULTS
 
 
@@ -35,7 +34,7 @@ def calcium_traces(
     save_path: Path = RESULTS / "calcium_traces.pdf",
 ) -> None:
     """Z-scored calcium (dF/F) traces, one per ROI, vertically offset."""
-    neuro = ZScore()(neuro)
+    neuro = zscore(neuro)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     for roi in range(neuro.shape[1]):
@@ -65,16 +64,3 @@ def psth(
     ax.set_ylabel(ylabel)
     fig.savefig(save_path)
     plt.close(fig)
-
-
-if __name__ == "__main__":
-    ephys = Ephys()
-    session_id = ephys.session_ids()[0]
-    spike_times = ephys.load_units(session_id)["spike_times"].iloc[:20].tolist()
-    start = min(st.min() for st in spike_times)
-    spike_raster(spike_times, window=(start, start + 10))
-
-    ophys = Ophys()
-    session_id = ophys.session_ids()[0]
-    dff = ophys.load_dff(session_id).iloc[:1000, :20]
-    calcium_traces(dff.to_numpy(), dff.index.to_numpy())

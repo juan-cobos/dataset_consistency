@@ -1,4 +1,33 @@
+from collections.abc import Sequence
+
 import numpy as np
+
+
+def zscore(neuro: np.ndarray) -> np.ndarray:
+    """Standardize neuro to zero mean and unit variance."""
+    neuro = np.asarray(neuro, dtype=float)
+    mean = neuro.mean(axis=0, keepdims=True)
+    std = neuro.std(axis=0, keepdims=True)
+    return (neuro - mean) / np.where(std == 0, 1, std)
+
+
+def average_firing_rate(
+    spike_times: Sequence[np.ndarray],
+    bin_size: float = 0.05,
+    start: float | None = None,
+    stop: float | None = None,
+) -> np.ndarray:
+    """Bin ragged per-unit spike times into a population-averaged firing rate (Hz)."""
+    if start is None:
+        start = min(st.min() for st in spike_times)
+    if stop is None:
+        stop = max(st.max() for st in spike_times)
+    edges = np.arange(start, stop + bin_size, bin_size)
+
+    counts = np.zeros(len(edges) - 1)
+    for st in spike_times:
+        counts += np.histogram(st, bins=edges)[0]
+    return counts / len(spike_times) / bin_size
 
 
 def align_epochs(
@@ -19,50 +48,3 @@ def align_epochs(
         ],
     )
     return epochs, centers
-
-
-if __name__ == "__main__":
-    from visual_coding.dataset import Ephys
-    from visual_coding.transforms import AverageFiringRate
-    from visual_coding.utils import RESULTS
-    from visual_coding.viz import psth
-
-    ephys = Ephys()
-    session_id = ephys.session_ids()[0]
-
-    window = (-0.5, 2.0)
-    bin_size = 0.05
-
-    trials = ephys.load_trials(session_id)
-    flashes = trials.loc[trials.stimulus_type == "flashes"]
-    event_times = flashes["start_time"].to_numpy()
-
-    units = ephys.load_units(session_id)
-
-    # Only the flash events (+ window) matter for the PSTH, so bin just that
-    # span instead of each region's full-session spike range.
-    start = event_times.min() + window[0]
-    stop = event_times.max() + window[1]
-    rate_edges = np.arange(start, stop + bin_size, bin_size)
-    rate_timestamps = rate_edges[:-1] + bin_size / 2
-
-    for region in ephys.brain_structures(session_id):
-        spike_times = units.loc[
-            units["ecephys_structure_acronym"] == region,
-            "spike_times",
-        ]
-        mean_firing_rate = AverageFiringRate(bin_size)(spike_times, start, stop)
-        epochs, centers = align_epochs(
-            mean_firing_rate,
-            rate_timestamps,
-            event_times,
-            window,
-            bin_size,
-        )
-
-        psth(
-            epochs,
-            centers,
-            save_path=RESULTS / f"psth_{region}.png",
-            ylabel=f"{region} firing rate (Hz)",
-        )
