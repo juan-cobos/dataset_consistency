@@ -1,0 +1,22 @@
+[project]
+name = "dataset-consistency"
+version = "0.1.0"
+description = "Consistency checks and loaders for the visual coding (neuropixels/ophys) NWB datasets"
+readme = "README.md"
+authors = [
+    { name = "Juan Cobos", email = "juan.cobos@igf.cnrs.fr" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.2",
+    "pandas>=2.3.3",
+    "pynwb>=4.1.0",
+    "hdmf-zarr>=0.13.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "visual_coding"

@@ -6,7 +6,13 @@ import numpy as np
 import pandas as pd
 import pynwb
 
-ROOT = Path("/root/capsule/data/")
+ROOT = Path("/root/capsule/data")
+try:
+    is_capsule = ROOT.exists()
+except OSError:
+    is_capsule = False
+if not is_capsule:
+    ROOT = Path(__file__).resolve().parents[3] / "data"
 NEUROPIXELS_PATH = ROOT / "visual_coding_neuropixels"
 OPHYS_PATH = ROOT / "visual_coding_ophys"
 METADATA_PATH = ROOT / "metadata"
@@ -55,7 +61,9 @@ class Dataset:
                 continue
             df = table.to_dataframe()
             if "stimulus_type" not in df.columns:
-                df["stimulus_type"] = df["stimulus_name"] if "stimulus_name" in df.columns else name
+                df["stimulus_type"] = (
+                    df["stimulus_name"] if "stimulus_name" in df.columns else name
+                )
             frames.append(df)
         return pd.concat(frames) if frames else pd.DataFrame()
 
@@ -105,3 +113,9 @@ class Ophys(Dataset):
             .time_series["running_speed"]
         )
         return pd.DataFrame({"running_speed": rs.data[:]}, index=rs.timestamps[:])
+
+
+if __name__ == "__main__":
+    ophys = Ophys()
+    session_id = ophys.session_ids()[0]
+    print(ophys.load_dff(session_id).head())
