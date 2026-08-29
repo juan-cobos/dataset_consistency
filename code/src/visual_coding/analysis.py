@@ -23,6 +23,7 @@ def psth(
     window: tuple[float, float] = (-0.5, 1.0),
     bin_size: float = 0.05,
     save_path: Path = RESULTS / "psth.png",
+    ylabel: str = "firing rate (Hz)",
 ) -> pd.Series:
     """Peri-stimulus time histogram around event_times."""
     bins = np.arange(window[0], window[1] + bin_size, bin_size)
@@ -54,7 +55,7 @@ def psth(
     ax.plot(result.index, result.to_numpy())
     ax.axvline(0, color="k", linestyle="--", linewidth=1)
     ax.set_xlabel("time from event (s)")
-    ax.set_ylabel("firing rate (Hz)" if timestamps is None else "response")
+    ax.set_ylabel(ylabel)
     fig.savefig(save_path)
     plt.close(fig)
 
@@ -68,5 +69,18 @@ if __name__ == "__main__":
     trials = ephys.load_trials(session_id)
     flash_times = trials.loc[trials.stimulus_type == "flashes", "start_time"].to_numpy()
 
-    spike_times = ephys.load_units(session_id)["spike_times"].iloc[0]
-    print(psth(spike_times, None, flash_times))
+    units = ephys.load_units(session_id)
+    spike_times = units["spike_times"]
+
+    bin_size = 0.05
+    start = min(st.min() for st in spike_times)
+    stop = max(st.max() for st in spike_times)
+    edges = np.arange(start, stop + bin_size, bin_size)
+    centers = edges[:-1] + bin_size / 2
+
+    counts = np.zeros(len(centers))
+    for st in spike_times:
+        counts += np.histogram(st, bins=edges)[0]
+    mean_firing_rate = counts / len(spike_times) / bin_size
+
+    print(psth(mean_firing_rate, centers, flash_times, bin_size=bin_size))
