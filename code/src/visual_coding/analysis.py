@@ -5,15 +5,7 @@ import numpy as np
 import pandas as pd
 
 from visual_coding.dataset import Ephys
-
-RESULTS = Path("/root/capsule/results")
-try:
-    is_capsule = RESULTS.exists()
-except OSError:
-    is_capsule = False
-if not is_capsule:
-    RESULTS = Path(__file__).resolve().parents[3] / "results"
-RESULTS.mkdir(parents=True, exist_ok=True)
+from visual_coding.utils import RESULTS
 
 
 def psth(

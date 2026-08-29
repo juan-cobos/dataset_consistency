@@ -8,13 +8,9 @@ import pandas as pd
 import pynwb
 from PIL import Image
 
-ROOT = Path("/root/capsule/data")
-try:
-    is_capsule = ROOT.exists()
-except OSError:
-    is_capsule = False
-if not is_capsule:
-    ROOT = Path(__file__).resolve().parents[3] / "data"
+from visual_coding.utils import resolve_capsule_path
+
+ROOT = resolve_capsule_path("data")
 NEUROPIXELS_PATH = ROOT / "visual_coding_neuropixels"
 OPHYS_PATH = ROOT / "visual_coding_ophys"
 METADATA_PATH = ROOT / "metadata"
