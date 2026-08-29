@@ -22,3 +22,8 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "visual_coding"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
