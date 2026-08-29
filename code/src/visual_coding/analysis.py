@@ -17,7 +17,7 @@ RESULTS.mkdir(parents=True, exist_ok=True)
 
 
 def psth(
-    neuron: np.ndarray,
+    neuro: np.ndarray,
     timestamps: np.ndarray | None,
     event_times: np.ndarray,
     window: tuple[float, float] = (-0.5, 1.0),
@@ -30,29 +30,35 @@ def psth(
     centers = bins[:-1] + bin_size / 2
 
     if timestamps is None:
-        counts = np.zeros(len(centers))
-        for event in event_times:
-            counts += np.histogram(neuron - event, bins=bins)[0]
-        response = counts / len(event_times) / bin_size
+        aligned = np.stack(
+            [
+                np.histogram(neuro - event, bins=bins)[0] / bin_size
+                for event in event_times
+            ],
+        )
     else:
         aligned = np.stack(
             [
                 np.interp(
                     centers + event,
                     timestamps,
-                    neuron,
+                    neuro,
                     left=np.nan,
                     right=np.nan,
                 )
                 for event in event_times
             ],
         )
-        response = np.nanmean(aligned, axis=0)
+
+    response = np.nanmean(aligned, axis=0)
+    n_trials = np.sum(~np.isnan(aligned), axis=0)
+    sem = np.nanstd(aligned, axis=0, ddof=1) / np.sqrt(n_trials)
 
     result = pd.Series(response, index=centers, name="psth")
 
     fig, ax = plt.subplots()
     ax.plot(result.index, result.to_numpy())
+    ax.fill_between(centers, response - sem, response + sem, alpha=0.3)
     ax.axvline(0, color="k", linestyle="--", linewidth=1)
     ax.set_xlabel("time from event (s)")
     ax.set_ylabel(ylabel)
@@ -63,6 +69,8 @@ def psth(
 
 
 if __name__ == "__main__":
+    from visual_coding.transforms import AverageFiringRate
+
     ephys = Ephys()
     session_id = ephys.session_ids()[0]
 
@@ -78,9 +86,6 @@ if __name__ == "__main__":
     edges = np.arange(start, stop + bin_size, bin_size)
     centers = edges[:-1] + bin_size / 2
 
-    counts = np.zeros(len(centers))
-    for st in spike_times:
-        counts += np.histogram(st, bins=edges)[0]
-    mean_firing_rate = counts / len(spike_times) / bin_size
+    mean_firing_rate = AverageFiringRate(bin_size)(spike_times)
 
     print(psth(mean_firing_rate, centers, flash_times, bin_size=bin_size))
