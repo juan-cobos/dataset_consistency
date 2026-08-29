@@ -1,83 +1,68 @@
-from pathlib import Path
-
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-
-from visual_coding.dataset import Ephys
-from visual_coding.utils import RESULTS
 
 
-def psth(
+def align_epochs(
     neuro: np.ndarray,
-    timestamps: np.ndarray | None,
+    timestamps: np.ndarray,
     event_times: np.ndarray,
-    window: tuple[float, float] = (-0.5, 1.0),
-    bin_size: float = 0.05,
-    save_path: Path = RESULTS / "psth.png",
-    ylabel: str = "firing rate (Hz)",
-) -> pd.Series:
-    """Peri-stimulus time histogram around event_times."""
+    window: tuple[float, float],
+    bin_size: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Align a continuous neuro trace onto a window around each event time."""
     bins = np.arange(window[0], window[1] + bin_size, bin_size)
     centers = bins[:-1] + bin_size / 2
 
-    if timestamps is None:
-        aligned = np.stack(
-            [
-                np.histogram(neuro - event, bins=bins)[0] / bin_size
-                for event in event_times
-            ],
-        )
-    else:
-        aligned = np.stack(
-            [
-                np.interp(
-                    centers + event,
-                    timestamps,
-                    neuro,
-                    left=np.nan,
-                    right=np.nan,
-                )
-                for event in event_times
-            ],
-        )
-
-    response = np.nanmean(aligned, axis=0)
-    n_trials = np.sum(~np.isnan(aligned), axis=0)
-    sem = np.nanstd(aligned, axis=0, ddof=1) / np.sqrt(n_trials)
-
-    result = pd.Series(response, index=centers, name="psth")
-
-    fig, ax = plt.subplots()
-    ax.plot(result.index, result.to_numpy())
-    ax.fill_between(centers, response - sem, response + sem, alpha=0.3)
-    ax.axvline(0, color="k", linestyle="--", linewidth=1)
-    ax.set_xlabel("time from event (s)")
-    ax.set_ylabel(ylabel)
-    fig.savefig(save_path)
-    plt.close(fig)
-
-    return result
+    epochs = np.stack(
+        [
+            np.interp(centers + event, timestamps, neuro, left=np.nan, right=np.nan)
+            for event in event_times
+        ],
+    )
+    return epochs, centers
 
 
 if __name__ == "__main__":
+    from visual_coding.dataset import Ephys
     from visual_coding.transforms import AverageFiringRate
+    from visual_coding.utils import RESULTS
+    from visual_coding.viz import psth
 
     ephys = Ephys()
     session_id = ephys.session_ids()[0]
 
+    window = (-0.5, 2.0)
+    bin_size = 0.05
+
     trials = ephys.load_trials(session_id)
-    flash_times = trials.loc[trials.stimulus_type == "flashes", "start_time"].to_numpy()
+    flashes = trials.loc[trials.stimulus_type == "flashes"]
+    event_times = flashes["start_time"].to_numpy()
 
     units = ephys.load_units(session_id)
-    spike_times = units["spike_times"]
 
-    bin_size = 0.05
-    start = min(st.min() for st in spike_times)
-    stop = max(st.max() for st in spike_times)
-    edges = np.arange(start, stop + bin_size, bin_size)
-    centers = edges[:-1] + bin_size / 2
+    # Only the flash events (+ window) matter for the PSTH, so bin just that
+    # span instead of each region's full-session spike range.
+    start = event_times.min() + window[0]
+    stop = event_times.max() + window[1]
+    rate_edges = np.arange(start, stop + bin_size, bin_size)
+    rate_timestamps = rate_edges[:-1] + bin_size / 2
 
-    mean_firing_rate = AverageFiringRate(bin_size)(spike_times)
+    for region in ephys.brain_structures(session_id):
+        spike_times = units.loc[
+            units["ecephys_structure_acronym"] == region,
+            "spike_times",
+        ]
+        mean_firing_rate = AverageFiringRate(bin_size)(spike_times, start, stop)
+        epochs, centers = align_epochs(
+            mean_firing_rate,
+            rate_timestamps,
+            event_times,
+            window,
+            bin_size,
+        )
 
-    print(psth(mean_firing_rate, centers, flash_times, bin_size=bin_size))
+        psth(
+            epochs,
+            centers,
+            save_path=RESULTS / f"psth_{region}.png",
+            ylabel=f"{region} firing rate (Hz)",
+        )

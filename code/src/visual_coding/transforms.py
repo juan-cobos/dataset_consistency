@@ -43,9 +43,16 @@ class AverageFiringRate:
     def __init__(self, bin_size: float = 0.05) -> None:
         self.bin_size = bin_size
 
-    def __call__(self, spike_times: Sequence[np.ndarray]) -> np.ndarray:
-        start = min(st.min() for st in spike_times)
-        stop = max(st.max() for st in spike_times)
+    def __call__(
+        self,
+        spike_times: Sequence[np.ndarray],
+        start: float | None = None,
+        stop: float | None = None,
+    ) -> np.ndarray:
+        if start is None:
+            start = min(st.min() for st in spike_times)
+        if stop is None:
+            stop = max(st.max() for st in spike_times)
         edges = np.arange(start, stop + self.bin_size, self.bin_size)
 
         counts = np.zeros(len(edges) - 1)

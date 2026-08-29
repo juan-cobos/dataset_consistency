@@ -46,6 +46,27 @@ def calcium_traces(
     plt.close(fig)
 
 
+def psth(
+    epochs: np.ndarray,
+    centers: np.ndarray,
+    save_path: Path = RESULTS / "psth.png",
+    ylabel: str = "neuro",
+) -> None:
+    """Plot mean and SEM across pre-aligned epochs."""
+    response = np.nanmean(epochs, axis=0)
+    n_trials = np.sum(~np.isnan(epochs), axis=0)
+    sem = np.nanstd(epochs, axis=0, ddof=1) / np.sqrt(n_trials)
+
+    fig, ax = plt.subplots()
+    ax.plot(centers, response)
+    ax.fill_between(centers, response - sem, response + sem, alpha=0.3)
+    ax.axvline(0, color="k", linestyle="--", linewidth=1)
+    ax.set_xlabel("time from event (s)")
+    ax.set_ylabel(ylabel)
+    fig.savefig(save_path)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     ephys = Ephys()
     session_id = ephys.session_ids()[0]
