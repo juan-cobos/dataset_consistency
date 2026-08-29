@@ -101,14 +101,39 @@ class Ophys(Dataset):
     data_path: Path = OPHYS_PATH
     metadata_path: Path = METADATA_PATH / "visual_coding_ophys_metadata.csv"
 
-    def load_stimulus(self, session_id: str, stimulus_type: str) -> np.ndarray:
-        templates = self.load_nwb(session_id).stimulus_template
+    def _stimulus_template(
+        self,
+        nwb: pynwb.NWBFile,
+        stimulus_type: str,
+    ) -> pynwb.image.ImageSeries:
+        templates = nwb.stimulus_template
         for name in (stimulus_type, f"{stimulus_type}_template"):
             if name in templates:
-                return templates[name].data[:]
+                return templates[name]
         raise KeyError(
             f"No stimulus template for {stimulus_type!r}; available: {list(templates.keys())}",
         )
+
+    def load_stimulus(
+        self,
+        session_id: str,
+        stimulus_type: str,
+    ) -> pynwb.image.IndexSeries:
+        """Return the presentation series (data=frame index, timestamps=presentation times)."""
+        nwb = self.load_nwb(session_id)
+        self._stimulus_template(nwb, stimulus_type)
+        return nwb.stimulus[f"{stimulus_type}_stimulus"]
+
+    def load_image(
+        self,
+        session_id: str,
+        stimulus_type: str,
+        frame_idx: int,
+    ) -> Image.Image:
+        nwb = self.load_nwb(session_id)
+        template = self._stimulus_template(nwb, stimulus_type)
+        presentations = nwb.stimulus[f"{stimulus_type}_stimulus"]
+        return Image.fromarray(template.data[presentations.data[frame_idx]])
 
     def load_dff(self, session_id: str) -> pd.DataFrame:
         rrs = (
@@ -135,6 +160,6 @@ if __name__ == "__main__":
     session_id = ophys.session_ids()[0]
     print(ophys.load_dff(session_id).head())
 
-    frame = ophys.load_stimulus(session_id, "natural_movie_one")[0]
-    print(f"natural_movie_one frame 0: shape={frame.shape}, dtype={frame.dtype}")
-    Image.fromarray(frame).show()
+    presentations = ophys.load_stimulus(session_id, "natural_movie_one")
+    print(f"natural_movie_one presentation 0 @ t={presentations.timestamps[0]:.3f}s")
+    ophys.load_image(session_id, "natural_movie_one", 0).show()
