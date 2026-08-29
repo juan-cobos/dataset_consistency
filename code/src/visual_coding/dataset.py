@@ -13,9 +13,10 @@ from visual_coding.utils import resolve_capsule_path
 ROOT = resolve_capsule_path("data")
 NEUROPIXELS_PATH = ROOT / "visual_coding_neuropixels"
 OPHYS_PATH = ROOT / "visual_coding_ophys"
+VISUAL_LEARNING_PATH = ROOT / "Visual-Learning-SWDB"
 METADATA_PATH = ROOT / "metadata"
 
-DATASETS = ("ophys", "ephys")
+DATASETS = ("ophys", "ephys", "visual_learning")
 
 
 @dataclass
@@ -174,6 +175,71 @@ class Ophys(Dataset):
         return pd.DataFrame({"running_speed": rs.data[:]}, index=rs.timestamps[:])
 
 
+@dataclass
+class VisualLearning(Dataset):
+    """Multiplane-ophys visual-learning sessions (behavioral change-detection task)."""
+
+    name: str = "visual_learning"
+    data_path: Path = VISUAL_LEARNING_PATH
+    metadata_path: Path = METADATA_PATH / "visual_learning_session_metadata.csv"
+
+    def load_trials(self, session_id: str) -> pd.DataFrame:
+        """Load stimulus presentations for session_id, tagged by stimulus_type (image_name).
+
+        `nwb.trials` holds per-trial behavioral outcomes (go/catch/hit/miss/...)
+        rather than stimulus identity; use `load_behavior_trials` for that table.
+        """
+        nwb = self.load_nwb(session_id)
+        df = nwb.intervals["stimulus_presentations"].to_dataframe()
+        df["stimulus_type"] = df["image_name"]
+        return df
+
+    def load_behavior_trials(self, session_id: str) -> pd.DataFrame:
+        """Load the per-trial behavioral outcome table (go/catch/hit/miss/...) for session_id."""
+        return self.load_nwb(session_id).trials.to_dataframe()
+
+    def brain_structures(self, session_id: str) -> np.ndarray:
+        """Return the unique brain structures imaged across planes in session_id."""
+        planes = self.load_nwb(session_id).imaging_planes.values()
+        return np.unique([plane.location.split()[1] for plane in planes])
+
+    def plane_names(self, session_id: str) -> list[str]:
+        """Return the names of the imaging-plane processing modules for session_id."""
+        return list(self.load_nwb(session_id).imaging_planes.keys())
+
+    def load_dff(
+        self,
+        session_id: str,
+        plane: str | None = None,
+    ) -> dict[str, pd.DataFrame]:
+        """Load dF/F traces per imaging plane for session_id, indexed by timestamp.
+
+        Planes are recorded on an interleaved scan mirror, so timestamps differ
+        slightly between planes; traces are kept per-plane rather than concatenated.
+        Pass `plane` (e.g. "VISp_0") to load a single plane instead of all of them.
+        """
+        nwb = self.load_nwb(session_id)
+        plane_names = [plane] if plane is not None else self.plane_names(session_id)
+        traces = {}
+        for name in plane_names:
+            rrs = (
+                nwb.processing[name]
+                .data_interfaces["dff_timeseries"]
+                .roi_response_series["dff_timeseries"]
+            )
+            traces[name] = pd.DataFrame(
+                rrs.data[:],
+                index=rrs.timestamps[:],
+                columns=rrs.rois.data[:],
+            )
+        return traces
+
+    def load_behavior(self, session_id: str) -> pd.DataFrame:
+        """Load the running speed time series for session_id."""
+        rs = self.load_nwb(session_id).processing["running"].data_interfaces["speed"]
+        return pd.DataFrame({"running_speed": rs.data[:]}, index=rs.timestamps[:])
+
+
 if __name__ == "__main__":
     ophys = Ophys()
     session_id = ophys.session_ids()[0]
@@ -182,3 +248,9 @@ if __name__ == "__main__":
     presentations = ophys.load_stimulus(session_id, "natural_movie_one")
     print(f"natural_movie_one presentation 0 @ t={presentations.timestamps[0]:.3f}s")
     ophys.load_image(session_id, "natural_movie_one", 0).show()
+
+    visual_learning = VisualLearning()
+    session_id = visual_learning.session_ids()[0]
+    print(visual_learning.stimulus_types(session_id))
+    plane = visual_learning.plane_names(session_id)[0]
+    print(visual_learning.load_dff(session_id, plane)[plane].head())
