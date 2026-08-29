@@ -87,6 +87,10 @@ class Ephys(Dataset):
     def load_units(self, session_id: str) -> pd.DataFrame:
         return self.load_nwb(session_id).units.to_dataframe()
 
+    def brain_structures(self, session_id: str) -> np.ndarray:
+        acronyms = self.load_units(session_id)["ecephys_structure_acronym"]
+        return acronyms[acronyms != ""].unique()
+
     def load_behavior(self, session_id: str) -> dict[str, pd.DataFrame]:
         running = self.load_nwb(session_id).processing["running"]
         return {
@@ -134,6 +138,10 @@ class Ophys(Dataset):
         template = self._stimulus_template(nwb, stimulus_type)
         presentations = nwb.stimulus[f"{stimulus_type}_stimulus"]
         return Image.fromarray(template.data[presentations.data[frame_idx]])
+
+    def brain_structures(self, session_id: str) -> np.ndarray:
+        planes = self.load_nwb(session_id).imaging_planes.values()
+        return np.unique([plane.location for plane in planes])
 
     def load_dff(self, session_id: str) -> pd.DataFrame:
         rrs = (
