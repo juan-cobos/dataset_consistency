@@ -16,8 +16,6 @@ OPHYS_PATH = ROOT / "visual_coding_ophys"
 VISUAL_LEARNING_PATH = ROOT / "Visual-Learning-SWDB"
 METADATA_PATH = ROOT / "metadata"
 
-DATASETS = ("ophys", "ephys", "visual_learning")
-
 
 @dataclass
 class Dataset:
@@ -239,6 +237,8 @@ class VisualLearning(Dataset):
         rs = self.load_nwb(session_id).processing["running"].data_interfaces["speed"]
         return pd.DataFrame({"running_speed": rs.data[:]}, index=rs.timestamps[:])
 
+
+ALL_DATASETS = {"ophys": Ophys, "ephys": Ephys, "visual_learning": VisualLearning}
 
 if __name__ == "__main__":
     ophys = Ophys()
