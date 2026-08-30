@@ -30,6 +30,21 @@ def average_firing_rate(
     return counts / len(spike_times) / bin_size
 
 
+def trial_spike_rates(
+    spike_times: np.ndarray,
+    start_times: np.ndarray,
+    duration: float,
+) -> np.ndarray:
+    """Mean firing rate (Hz) of one unit in a `duration`-long window after each start time."""
+    spike_times = np.asarray(spike_times)
+    starts = np.asarray(start_times, dtype=float)
+    counts = np.searchsorted(spike_times, starts + duration) - np.searchsorted(
+        spike_times,
+        starts,
+    )
+    return counts / duration
+
+
 def align_epochs(
     neuro: np.ndarray,
     timestamps: np.ndarray,
