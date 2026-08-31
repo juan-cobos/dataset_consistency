@@ -107,37 +107,33 @@ class Dataset:
                 families.setdefault(family, []).append(str(stimulus_type))
         return {family: sorted(names) for family, names in families.items()}
 
-    def running_speed(self, session_id: str) -> pd.Series:
-        """Running speed for session_id, indexed by time (s)."""
-        behavior = self.load_behavior(session_id)
-        if isinstance(behavior, dict):
-            behavior = behavior[SHARED_BEHAVIOR]
-        return behavior[SHARED_BEHAVIOR]
-
 
 @dataclass
 class Ephys(Dataset):
     name: str = "ephys"
     data_path: Path = NEUROPIXELS_PATH
     metadata_path: Path = METADATA_PATH / "visual_coding_neuropixels_metadata.csv"
+    amplitude_cutoff: float = 0.1
+    presence_ratio: float = 0.95
+    isi_violations: float = 0.5
 
-    def load_units(self, session_id: str, filter: bool = True) -> pd.DataFrame:  # noqa: A002
+    def load_units(self, session_id: str, quality_only: bool = True) -> pd.DataFrame:
         """Load the recorded units (neurons) and their properties for session_id."""
         units = self.load_nwb(session_id).units.to_dataframe()
-        if not filter:
+        if not quality_only:
             return units
         return units[
             (units["quality"] == "good")
-            & (units["amplitude_cutoff"] <= 0.1)
-            & (units["presence_ratio"] >= 0.95)
-            & (units["isi_violations"] <= 0.5)
+            & (units["amplitude_cutoff"] <= self.amplitude_cutoff)
+            & (units["presence_ratio"] >= self.presence_ratio)
+            & (units["isi_violations"] <= self.isi_violations)
             & (units["ecephys_structure_acronym"] != "")
         ]
 
     def brain_structures(self, session_id: str) -> np.ndarray:
         """Return the unique brain structures recorded across units in session_id."""
         # Probe coverage, so every sorted unit counts, not just the good ones.
-        acronyms = self.load_units(session_id, filter=False)[
+        acronyms = self.load_units(session_id, quality_only=False)[
             "ecephys_structure_acronym"
         ]
         return acronyms[acronyms != ""].unique()

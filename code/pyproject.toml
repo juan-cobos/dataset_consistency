@@ -14,6 +14,10 @@ dependencies = [
     "hdmf-zarr>=0.13.0",
     "pillow>=12.3.0",
     "matplotlib>=3.11.1",
+    "torch>=2.0",
+    "transformers>=4.40",
+    "torchvision>=0.28.0",
+    "scikit-learn>=1.9.0",
 ]
 
 [build-system]
