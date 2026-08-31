@@ -93,10 +93,10 @@ class Dataset:
             frames.append(df)
         return pd.concat(frames) if frames else pd.DataFrame()
 
-    def stimulus_types(self, session_id: str) -> np.ndarray:
+    def stimulus_types(self, session_id: str) -> list:
         """Return the unique stimulus types presented in session_id."""
         trials = self.load_trials(session_id)
-        return trials.stimulus_type.unique()
+        return trials.stimulus_type.unique().tolist()
 
     def stimulus_families(self, session_id: str) -> dict[str, list[str]]:
         """Map each shared stimulus family to this session's names for it."""
