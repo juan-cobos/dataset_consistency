@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
@@ -15,6 +16,24 @@ NEUROPIXELS_PATH = ROOT / "visual_coding_neuropixels"
 OPHYS_PATH = ROOT / "visual_coding_ophys"
 VISUAL_LEARNING_PATH = ROOT / "Visual-Learning-SWDB"
 METADATA_PATH = ROOT / "metadata"
+
+SHARED_REGION = "VISp"
+SHARED_BEHAVIOR = "running_speed"
+
+# Visual learning names each image by identity; visual coding names the set.
+IMAGE_NAME = re.compile(r"im\d+", re.IGNORECASE)
+
+
+def stimulus_family(stimulus_type: str) -> str | None:
+    """Group a dataset's own stimulus name into the family the datasets share."""
+    name = str(stimulus_type).lower()
+    if "grating" in name:
+        return "gratings"
+    if "movie" in name:
+        return "natural_movies"
+    if name.startswith("natural") or IMAGE_NAME.fullmatch(name):
+        return "natural_images"
+    return None
 
 
 @dataclass
@@ -79,6 +98,22 @@ class Dataset:
         trials = self.load_trials(session_id)
         return trials.stimulus_type.unique()
 
+    def stimulus_families(self, session_id: str) -> dict[str, list[str]]:
+        """Map each shared stimulus family to this session's names for it."""
+        families: dict[str, list[str]] = {}
+        for stimulus_type in self.stimulus_types(session_id):
+            family = stimulus_family(stimulus_type)
+            if family is not None:
+                families.setdefault(family, []).append(str(stimulus_type))
+        return {family: sorted(names) for family, names in families.items()}
+
+    def running_speed(self, session_id: str) -> pd.Series:
+        """Running speed for session_id, indexed by time (s)."""
+        behavior = self.load_behavior(session_id)
+        if isinstance(behavior, dict):
+            behavior = behavior[SHARED_BEHAVIOR]
+        return behavior[SHARED_BEHAVIOR]
+
 
 @dataclass
 class Ephys(Dataset):
@@ -86,13 +121,25 @@ class Ephys(Dataset):
     data_path: Path = NEUROPIXELS_PATH
     metadata_path: Path = METADATA_PATH / "visual_coding_neuropixels_metadata.csv"
 
-    def load_units(self, session_id: str) -> pd.DataFrame:
-        """Load all recorded units (neurons) and their properties for session_id."""
-        return self.load_nwb(session_id).units.to_dataframe()
+    def load_units(self, session_id: str, filter: bool = True) -> pd.DataFrame:  # noqa: A002
+        """Load the recorded units (neurons) and their properties for session_id."""
+        units = self.load_nwb(session_id).units.to_dataframe()
+        if not filter:
+            return units
+        return units[
+            (units["quality"] == "good")
+            & (units["amplitude_cutoff"] <= 0.1)
+            & (units["presence_ratio"] >= 0.95)
+            & (units["isi_violations"] <= 0.5)
+            & (units["ecephys_structure_acronym"] != "")
+        ]
 
     def brain_structures(self, session_id: str) -> np.ndarray:
         """Return the unique brain structures recorded across units in session_id."""
-        acronyms = self.load_units(session_id)["ecephys_structure_acronym"]
+        # Probe coverage, so every sorted unit counts, not just the good ones.
+        acronyms = self.load_units(session_id, filter=False)[
+            "ecephys_structure_acronym"
+        ]
         return acronyms[acronyms != ""].unique()
 
     def load_behavior(self, session_id: str) -> dict[str, pd.DataFrame]:
@@ -248,9 +295,3 @@ if __name__ == "__main__":
     presentations = ophys.load_stimulus(session_id, "natural_movie_one")
     print(f"natural_movie_one presentation 0 @ t={presentations.timestamps[0]:.3f}s")
     ophys.load_image(session_id, "natural_movie_one", 0).show()
-
-    visual_learning = VisualLearning()
-    session_id = visual_learning.session_ids()[0]
-    print(visual_learning.stimulus_types(session_id))
-    plane = visual_learning.plane_names(session_id)[0]
-    print(visual_learning.load_dff(session_id, plane)[plane].head())
