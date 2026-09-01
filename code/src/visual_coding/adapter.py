@@ -200,6 +200,13 @@ class Adapter:
         series_name = f"{stimulus_type}_stimulus"
         if series_name in nwb.stimulus:
             series = nwb.stimulus[series_name]
+            # Stimuli with nothing to show - spontaneous grey screen - are
+            # registered as plain intervals rather than a series of frames.
+            if hasattr(series, "to_dataframe"):
+                table = series.to_dataframe()
+                table["stimulus_type"] = stimulus_type
+                return table
+
             start_time = np.asarray(series.timestamps[:])
             duration = np.median(np.diff(start_time)) if len(start_time) > 1 else np.nan
             return pd.DataFrame(

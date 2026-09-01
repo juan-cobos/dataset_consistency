@@ -64,3 +64,23 @@ def spontaneous_response_distribution(
     start, stop = spontaneous_window
     starts = rng.uniform(start, stop - duration, size=n_intervals)
     return trial_spike_rates(spike_times, starts, duration)
+
+
+def participation_ratio(values: np.ndarray) -> float:
+    """Participation ratio normalized."""
+    values = np.clip(np.asarray(values, dtype=float), 0, None)
+    mean_square = np.mean(values**2)
+    if values.size == 0 or mean_square == 0:
+        return 0.0
+    return float(np.mean(values) ** 2 / mean_square)
+
+
+def dim_cov(neuro: np.ndarray) -> float:
+    """Dimensionality of the covariance."""
+    eigenvalues = np.linalg.eigvalsh(np.cov(neuro, rowvar=False))
+    return participation_ratio(eigenvalues)
+
+
+def dim_rates(neuro: np.ndarray) -> float:
+    """Dimensionality of the rates."""
+    return participation_ratio(neuro.mean(axis=0))
