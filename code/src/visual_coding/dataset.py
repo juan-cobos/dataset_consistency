@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
@@ -16,24 +15,6 @@ NEUROPIXELS_PATH = ROOT / "visual_coding_neuropixels"
 OPHYS_PATH = ROOT / "visual_coding_ophys"
 VISUAL_LEARNING_PATH = ROOT / "Visual-Learning-SWDB"
 METADATA_PATH = ROOT / "metadata"
-
-SHARED_REGION = "VISp"
-SHARED_BEHAVIOR = "running_speed"
-
-# Visual learning names each image by identity; visual coding names the set.
-IMAGE_NAME = re.compile(r"im\d+", re.IGNORECASE)
-
-
-def stimulus_family(stimulus_type: str) -> str | None:
-    """Group a dataset's own stimulus name into the family the datasets share."""
-    name = str(stimulus_type).lower()
-    if "grating" in name:
-        return "gratings"
-    if "movie" in name:
-        return "natural_movies"
-    if name.startswith("natural") or IMAGE_NAME.fullmatch(name):
-        return "natural_images"
-    return None
 
 
 @dataclass
@@ -97,15 +78,6 @@ class Dataset:
         """Return the unique stimulus types presented in session_id."""
         trials = self.load_trials(session_id)
         return trials.stimulus_type.unique().tolist()
-
-    def stimulus_families(self, session_id: str) -> dict[str, list[str]]:
-        """Map each shared stimulus family to this session's names for it."""
-        families: dict[str, list[str]] = {}
-        for stimulus_type in self.stimulus_types(session_id):
-            family = stimulus_family(stimulus_type)
-            if family is not None:
-                families.setdefault(family, []).append(str(stimulus_type))
-        return {family: sorted(names) for family, names in families.items()}
 
 
 @dataclass

@@ -1,12 +1,3 @@
-"""Cross-validated stimulus decoding, shared across the ephys and ophys datasets.
-
-`Decoder` wraps one session of any `Dataset` and exposes the same pipeline for
-all of them: pull the per-presentation stimulus table, bin the neural signal
-(spike times for ephys, dF/F traces for the imaging datasets) and the running
-speed into the same within-trial bins, then cross-validate a linear SVM on any
-combination of those feature sets.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -19,22 +10,9 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from visual_coding.analysis import align_epochs, average_firing_rate, zscore
-from visual_coding.dataset import (
-    SHARED_BEHAVIOR,
-    SHARED_REGION,
-    Dataset,
-    Ephys,
-    Ophys,
-    stimulus_family,
-)
-
-# The ophys stimulus tables spell out the units the ephys tables leave implicit.
-OPHYS_COLUMNS = {
-    "orientation_in_degrees": "orientation",
-    "spatial_frequency_in_cycles_per_degree": "spatial_frequency",
-    "temporal_frequency_in_hz": "temporal_frequency",
-}
+from visual_coding.adapter import SHARED_BEHAVIOR, SHARED_REGION, Adapter
+from visual_coding.analysis import align_epochs
+from visual_coding.dataset import Dataset
 
 
 @dataclass
@@ -62,35 +40,20 @@ class Decoder:
     verbose: bool = True
 
     @cached_property
+    def adapter(self) -> Adapter:
+        """The dataset behind one interface, so nothing here branches on modality."""
+        return Adapter(self.dataset, bin_size=self.bin_size)
+
+    @cached_property
     def trials(self) -> pd.DataFrame:
         """Per-presentation stimulus table, restricted to trials with a label."""
-        trials = self._stimulus_table()
-        if self.stimulus_type is not None and "stimulus_type" in trials:
-            names = trials["stimulus_type"]
-            trials = trials[
-                (names == self.stimulus_type)
-                | (names.map(stimulus_family) == self.stimulus_type)
-            ]
+        trials = self.adapter.presentations(self.session_id, self.stimulus_type)
         if self.label not in trials.columns:
             raise KeyError(
                 f"{self.label!r} not in the {self.dataset.name} stimulus table; "
                 f"available: {sorted(trials.columns)}",
             )
-        return trials.dropna(subset=[self.label])
-
-    def _stimulus_table(self) -> pd.DataFrame:
-        """Dataset-specific source of the per-presentation stimulus table."""
-        if not isinstance(self.dataset, Ophys):
-            return self.dataset.load_trials(self.session_id)
-
-        nwb = self.dataset.load_nwb(self.session_id)
-        if self.stimulus_type not in nwb.stimulus:
-            raise KeyError(
-                f"No stimulus table for {self.stimulus_type!r} in session "
-                f"{self.session_id}; available: {list(nwb.stimulus)}",
-            )
-        table = nwb.stimulus[self.stimulus_type].to_dataframe()
-        return table.rename(columns=OPHYS_COLUMNS)
+        return trials[~trials["is_blank"]].dropna(subset=[self.label])
 
     @property
     def event_times(self) -> np.ndarray:
@@ -127,73 +90,24 @@ class Decoder:
         )
         return epochs
 
-    def _spike_responses(self) -> np.ndarray:
-        """Per-unit binned firing rate: (n_units, n_trials, n_bins)."""
-        units = self.dataset.load_units(self.session_id)
-        in_region = units[units["ecephys_structure_acronym"] == self.region]
-        if in_region.empty:
-            in_region = units
-
-        start = self.event_times.min() + self.window[0]
-        stop = self.event_times.max() + self.window[1]
-        edges = np.arange(start, stop + self.bin_size, self.bin_size)
-        timestamps = edges[:-1] + self.bin_size / 2
-
-        return np.stack(
-            [
-                self._align(
-                    average_firing_rate([spike_times], self.bin_size, start, stop),
-                    timestamps,
-                )
-                for spike_times in in_region["spike_times"]
-            ],
-        )
-
-    def _trace_responses(self) -> np.ndarray:
-        """Per-ROI binned z-scored dF/F: (n_rois, n_trials, n_bins).
-
-        Visual-learning sessions image several planes on an interleaved scan
-        mirror, so each plane is aligned on its own timestamps before the ROIs
-        are pooled.
-        """
-        traces = self.dataset.load_dff(self.session_id)
-        if isinstance(traces, pd.DataFrame):
-            traces = {self.region: traces}
-        else:
-            traces = {
-                plane: dff
-                for plane, dff in traces.items()
-                if plane.startswith(self.region)
-            } or traces
-
-        responses = [
-            self._align(trace, dff.index.to_numpy())
-            for dff in traces.values()
-            for trace in zscore(dff.to_numpy()).T
-        ]
-        return np.stack(responses)
-
     @cached_property
     def neural_features(self) -> np.ndarray:
         """Per-neuron response (n_trials, n_neurons * n_bins)."""
-        responses = (
-            self._spike_responses()
-            if isinstance(self.dataset, Ephys)
-            else self._trace_responses()
+        signal, timestamps, neurons = self.adapter.population(
+            self.session_id,
+            region=self.region,
         )
+        responses = np.stack([self._align(trace, timestamps) for trace in signal.T])
         n_neurons, n_trials, n_bins = responses.shape
         if self.verbose:
-            kind = "units" if isinstance(self.dataset, Ephys) else "ROIs"
-            print(f"{n_neurons} {self.region} {kind} x {n_bins} bins")
+            print(f"{n_neurons} {self.region} neurons x {n_bins} bins")
         return responses.transpose(1, 0, 2).reshape(n_trials, n_neurons * n_bins)
 
     @cached_property
     def running_features(self) -> np.ndarray:
         """Return running speed: (n_trials, n_bins)."""
-        running = self.dataset.load_behavior(self.session_id)
-        if isinstance(running, dict):  # ephys returns one frame per running series
-            running = running[self.behavior]
-        return self._align(running[self.behavior].to_numpy(), running.index.to_numpy())
+        running = self.adapter.behavior(self.session_id)[self.behavior]
+        return self._align(running.to_numpy(), running.index.to_numpy())
 
     def feature_sets(self) -> dict[str, np.ndarray]:
         """Neural, behavioral and combined feature matrices."""
