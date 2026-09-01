@@ -81,9 +81,11 @@ class Decoder:
 
     def _align(self, values: np.ndarray, timestamps: np.ndarray) -> np.ndarray:
         """Bin one signal into the trial window: (n_trials, n_bins)."""
+        values = np.asarray(values, dtype=float)
+        sampled = ~np.isnan(values)
         epochs, _ = align_epochs(
-            values,
-            timestamps,
+            values[sampled],
+            np.asarray(timestamps)[sampled],
             self.event_times,
             self.window,
             self.bin_size,
@@ -106,7 +108,7 @@ class Decoder:
     @cached_property
     def running_features(self) -> np.ndarray:
         """Return running speed: (n_trials, n_bins)."""
-        running = self.adapter.behavior(self.session_id)[self.behavior]
+        running = self.adapter.behavior(self.session_id, self.behavior)[self.behavior]
         return self._align(running.to_numpy(), running.index.to_numpy())
 
     def feature_sets(self) -> dict[str, np.ndarray]:

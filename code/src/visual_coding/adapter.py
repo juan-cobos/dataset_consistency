@@ -7,7 +7,7 @@ translates all of that into four calls with fixed shapes and column names:
 
     population(session_id)            (n_time, n_neurons) signal + timestamps
     presentations(session_id, stim)   one row per presentation, canonical names
-    behavior(session_id)              time-indexed frame of behavioral series
+    behavior(session_id, name)        one behavioral measure, as recorded
     images(session_id, stimulus_type) pictures + a label per presentation
 
 Analyses written against those four work on any dataset, and a dataset is
@@ -212,14 +212,17 @@ class Adapter:
             )
         return self.dataset.load_trials(session_id)
 
-    def behavior(self, session_id: str) -> pd.DataFrame:
-        """Behavioral time series, time-indexed, one column per measure."""
-        series = self.dataset.load_behavior(session_id)
-        if isinstance(series, dict):  # ephys keeps one frame per running series
-            return pd.concat(series.values(), axis=1)
-        return series
+    def behavior(
+        self,
+        session_id: str,
+        name: str = SHARED_BEHAVIOR,
+    ) -> pd.DataFrame:
+        """Behavioral measure `name` was recorded in, on its own clock."""
+        measures = self.dataset.load_behavior(session_id)
+        return measures[name] if isinstance(measures, dict) else measures
 
     def running_speed(self, session_id: str) -> pd.Series:
+        """Running speed as a series, the measure all three datasets share."""
         return self.behavior(session_id)[SHARED_BEHAVIOR]
 
     def images(
