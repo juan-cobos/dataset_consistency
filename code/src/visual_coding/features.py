@@ -36,8 +36,9 @@ class FeatureExtractor:
         self.window = window
         self.bin_size = bin_size
         self.region = region
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.adapter = Adapter(dataset, bin_size=bin_size)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device={self.device}")
 
         trials = self.adapter.presentations(session_id, stimulus_type)
         self.trials = trials[~trials["is_blank"]]
