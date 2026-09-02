@@ -25,7 +25,7 @@ class FeatureExtractor:
         stimulus_type: str = "natural_scenes",
         blocks: tuple[int, ...] = (3, 6, 9, 12),
         window: tuple[float, float] = (0.0, 1.0),
-        bin_size: float = 0.25,
+        bin_size: float = 0.05,
         region: str = SHARED_REGION,
     ) -> None:
         self.dataset = dataset
