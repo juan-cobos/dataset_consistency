@@ -32,6 +32,14 @@ iu_corr = np.triu_indices(n_pairwise, k=1)
 real_corr_vec = real_corr[iu_corr[0], iu_corr[1]]
 null_corr_vec = null_corr[:, iu_corr[0], iu_corr[1]].ravel()
 
+# One-sided permutation test on the mean pairwise correlation: compare the
+# observed mean against the distribution of per-permutation null means
+# (not the pooled null_corr_vec, which pseudo-replicates non-independent pairs).
+real_mean = np.nanmean(real_corr_vec)
+null_means = np.nanmean(null_corr[:, iu_corr[0], iu_corr[1]], axis=1)
+p_value = (np.sum(null_means >= real_mean) + 1) / (n_permutations + 1)
+print(f"real mean correlation = {real_mean:.3f}, permutation p = {p_value:.4f}")
+
 # Figure 1: real_corr matrix, normalized to the full correlation range
 fig1, ax1 = plt.subplots(figsize=(6, 5))
 im = ax1.imshow(real_corr, cmap="RdBu_r", vmin=-1, vmax=1)
@@ -64,6 +72,14 @@ ax2.hist(
 ax2.set_xlabel("Correlation")
 ax2.set_ylabel("Density")
 ax2.set_title("Null vs. real pairwise correlation distributions")
+ax2.axvline(real_mean, color="tab:orange", linestyle="--", linewidth=1)
+ax2.text(
+    0.02,
+    0.95,
+    f"mean = {real_mean:.3f}\np = {p_value:.4f}",
+    transform=ax2.transAxes,
+    va="top",
+)
 ax2.legend()
 fig2.tight_layout()
 fig2.savefig(OUTPUT_DIR / "null_vs_real_hist.png", dpi=150)
