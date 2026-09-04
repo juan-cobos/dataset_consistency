@@ -19,8 +19,8 @@ import torch
 from torch.nn.functional import cosine_similarity
 from tqdm import tqdm
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "visual_coding_ophys"
-OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "rsa" / "ophys"
+DATA_DIR = Path("/data/visual_coding_ophys")
+OUTPUT_DIR = Path("/results/rsa/ophys")
 
 WINDOW = (0.00, 2.00)
 STIMULUS_TYPE = "drifting_gratings"

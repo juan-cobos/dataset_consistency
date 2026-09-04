@@ -6,6 +6,13 @@ builds one vector per distinct drifting_gratings orientation, averaging
 firing rate over that orientation's repeated presentations (pooled across
 temporal frequencies).
 
+Two matrices are saved per session. The raw one is cosine similarity between
+the rate vectors as they are; the centered one subtracts each unit's mean rate
+over the orientations first, so the similarity reflects tuning rather than
+which units simply fire fastest - a constant every orientation shares, which
+otherwise compresses the whole matrix towards 1. The per-orientation rate
+matrix is saved too, since recomputing it means re-reading every NWB file.
+
 Runs over every session under `visual_coding_neuropixels`, skipping
 sessions with no good units in `REGION`, and saves each session's
 distance-matrix array and plot named after the session.
@@ -20,7 +27,10 @@ from torch.nn.functional import cosine_similarity
 from tqdm import tqdm
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "visual_coding_neuropixels"
-OUTPUT_DIR = Path(__file__).resolve().parent / "output" / "rsa" / "ephys"
+RESULTS_DIR = Path(__file__).resolve().parents[2] / "results" / "ephys"
+OUTPUT_DIR = RESULTS_DIR / "raw"
+CENTERED_DIR = RESULTS_DIR / "centered"
+RESPONSE_DIR = RESULTS_DIR / "responses"
 
 REGION = "VISp"
 WINDOW = (0.00, 2.00)
@@ -48,6 +58,20 @@ def firing_rates(
         ],
     )
     return (counts / duration).mean(axis=1)  # (n_cells, )
+
+
+def similarity_matrix(X_brain: np.ndarray) -> np.ndarray:
+    """Cosine similarity between every pair of orientation vectors."""
+    n_orientations = len(X_brain)
+    D_brain = np.zeros((n_orientations, n_orientations))
+    for i in tqdm(range(n_orientations), desc="computing distances"):
+        for j in range(n_orientations):
+            D_brain[i, j] = distance_metric(
+                torch.from_numpy(X_brain[i]),
+                torch.from_numpy(X_brain[j]),
+                dim=0,
+            ).numpy()
+    return D_brain
 
 
 def compute_session_rsa(session_dir: Path) -> tuple[np.ndarray, list] | None:
@@ -94,19 +118,7 @@ def compute_session_rsa(session_dir: Path) -> tuple[np.ndarray, list] | None:
         ].to_numpy()
         X_brain[i] = firing_rates(event_times, units["spike_times"])
 
-    D_brain = np.zeros((n_orientations, n_orientations))
-    for i in tqdm(
-        range(n_orientations),
-        desc=f"{session_dir.name}: computing distances",
-    ):
-        for j in range(n_orientations):
-            D_brain[i, j] = distance_metric(
-                torch.from_numpy(X_brain[i]),
-                torch.from_numpy(X_brain[j]),
-                dim=0,
-            ).numpy()
-
-    return D_brain, orientation_labels
+    return X_brain, orientation_labels
 
 
 def main() -> None:
@@ -114,21 +126,29 @@ def main() -> None:
     if not session_dirs:
         raise SystemExit(f"no sessions found in {DATA_DIR}")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    for directory in (OUTPUT_DIR, CENTERED_DIR, RESPONSE_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
+
     for session_dir in session_dirs:
         npy_path = OUTPUT_DIR / f"{session_dir.name}.npy"
-        if npy_path.exists():
+        centered_path = CENTERED_DIR / f"{session_dir.name}.npy"
+        if npy_path.exists() and centered_path.exists():
             print(f"{session_dir.name}: {npy_path} already exists, skipping")
             continue
 
         result = compute_session_rsa(session_dir)
         if result is None:
             continue
-        D_brain, orientation_labels = result
-        print(D_brain)
+        X_brain, orientation_labels = result
+
+        D_brain = similarity_matrix(X_brain)
+        D_centered = similarity_matrix(X_brain - X_brain.mean(axis=0))
+        print(D_centered)
 
         np.save(npy_path, D_brain)
-        print(f"saved {npy_path}")
+        np.save(centered_path, D_centered)
+        np.save(RESPONSE_DIR / f"{session_dir.name}.npy", X_brain)
+        print(f"saved {npy_path} and {centered_path}")
 
 
 if __name__ == "__main__":
