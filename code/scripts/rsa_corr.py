@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 """Session-by-session agreement of the orientation RDMs, within and across datasets.
 
 `rsa_orientations_{ephys,ophys}.py` now save two matrices per session, so every
@@ -17,7 +15,6 @@ shuffled independently before correlating:
 Outputs land in `scripts/output/rsa_corr`.
 """
 
->>>>>>> dev
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -53,6 +50,19 @@ CRE_ORDER = [
 
 iu = np.triu_indices(len(ORIENTATIONS), k=1)
 BINS = np.linspace(-1, 1, 40)
+
+# Sized for a projected slide, not a page: everything a step up from default.
+plt.rcParams.update(
+    {
+        "font.size": 13,
+        "axes.labelsize": 15,
+        "axes.titlesize": 14,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 13,
+        "figure.titlesize": 17,
+    },
+)
 
 
 def session_vectors(dataset: str, variant: str) -> tuple[list[str], np.ndarray]:
@@ -149,9 +159,9 @@ def annotate_cre(ax: plt.Axes, cre: pd.Series, axis: str) -> None:
         line = ax.axvline if axis == "x" else ax.axhline
         line(edge - 0.5, color="k", linewidth=0.6)
     if axis == "x":
-        ax.set_xticks(centers, labels, rotation=45, ha="right", fontsize=7)
+        ax.set_xticks(centers, labels, rotation=45, ha="right", fontsize=10)
     else:
-        ax.set_yticks(centers, labels, fontsize=7)
+        ax.set_yticks(centers, labels, fontsize=10)
 
 
 def plot_matrix(
@@ -166,7 +176,9 @@ def plot_matrix(
     """Heatmap of a correlation matrix, optionally labelled by Cre line."""
     # Square matrices are drawn square; the ephys x ophys one is wide and short.
     square = corr.shape[0] == corr.shape[1]
-    width = 9 if cre_x is not None else 7
+    # Bigger type needs a bigger canvas: 13 Cre labels down 500 sessions only
+    # stay legible if the axes grow with the font.
+    width = 12 if cre_x is not None else 8
     height = width - 1 if square else 6 * corr.shape[0] / corr.shape[1] + 2.5
     fig, ax = plt.subplots(figsize=(width, height))
     im = ax.imshow(
@@ -227,6 +239,7 @@ def plot_hist(
         f"mean = {real_mean:.3f}\np = {p_value:.4f}",
         transform=ax.transAxes,
         va="top",
+        fontsize=14,
     )
     ax.legend()
     fig.tight_layout()

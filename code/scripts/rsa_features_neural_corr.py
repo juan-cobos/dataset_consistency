@@ -2,7 +2,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from rsa_features_blocks import block_names, session_matrices
 from scipy.stats import spearmanr
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +16,44 @@ MODELS = {"dinov2-base": "embedding output", "resnet-50": "stem output"}
 VARIANTS = ["raw", "centered"]
 
 iu = np.triu_indices(len(ORIENTATIONS), k=1)
+
+
+def block_names(matrices: dict[str, np.ndarray]) -> list[str]:
+    """One trunk's block keys, ordered by depth rather than by string."""
+    return sorted(matrices, key=lambda block: int(block.split("_")[1]))
+
+
+def cosine_matrix(X: np.ndarray) -> np.ndarray:
+    """Cosine similarity between every pair of condition vectors: (n, n)."""
+    norms = np.linalg.norm(X, axis=1, keepdims=True)
+    unit = X / np.where(norms == 0, 1, norms)
+    return unit @ unit.T
+
+
+def session_matrices(path: Path) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """One feature file's per-block model RDMs, raw and centered.
+
+    Each block's presentations are averaged within orientation, giving the
+    (n_orientations, n_features) matrix an RDM is built from. Centering
+    subtracts each feature's mean over the orientations first, so the
+    structure reflects how the trunk separates them rather than the constant
+    every orientation shares - matching the neural `centered` variant.
+    """
+    data = np.load(path)
+    orientation = data["orientation"]
+
+    raw, centered = {}, {}
+    for block in (name for name in data.files if name.startswith("block_")):
+        features = data[block]
+        responses = np.stack(
+            [
+                features[np.isclose(orientation, value)].mean(axis=0)
+                for value in ORIENTATIONS
+            ],
+        )
+        raw[block] = cosine_matrix(responses)
+        centered[block] = cosine_matrix(responses - responses.mean(axis=0))
+    return raw, centered
 
 
 def model_reference(model: str) -> dict[str, dict[str, np.ndarray]]:
